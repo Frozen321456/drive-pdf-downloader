@@ -13,31 +13,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "DrivePDF — Google Drive View-Only PDF Downloader",
+  title: "DrivePDF — Find & Download Google Drive PDFs",
   description:
-    "Modern web tool to find and access view-only Google Drive PDFs from educational websites. Scan pages, extract Drive links, and download restricted PDFs.",
-  keywords: [
-    "google drive",
-    "pdf downloader",
-    "view only pdf",
-    "educational notes",
-    "drive scraper",
-  ],
+    "Scan educational websites for Google Drive PDFs, including view-only files. Modern free tool for students.",
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col bg-background text-foreground">
-        {children}
-      </body>
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+      <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );
 }
