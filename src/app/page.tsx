@@ -70,6 +70,28 @@ export default function Home() {
     setDownloading(r.fileId);
     setDlMsg((m) => ({ ...m, [r.fileId]: "" }));
     try {
+      const captureRes = await fetch("/api/capture", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileId: r.fileId, name: r.name }),
+      });
+      if (captureRes.ok) {
+        const blob = await captureRes.blob();
+        if (blob.size > 1000) {
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = `${r.name || "document"}.pdf`;
+          a.click();
+          URL.revokeObjectURL(a.href);
+          const pages = captureRes.headers.get("X-Page-Count");
+          setDlMsg((m) => ({
+            ...m,
+            [r.fileId]: pages ? `ok:${pages}` : "ok",
+          }));
+          return;
+        }
+      }
+
       const res = await fetch(`/api/download?id=${encodeURIComponent(r.fileId)}`);
       if (res.ok) {
         const blob = await res.blob();
@@ -84,11 +106,18 @@ export default function Home() {
           return;
         }
       }
-      setDlMsg((m) => ({ ...m, [r.fileId]: "restricted" }));
-      window.open(r.viewUrl, "_blank");
-    } catch {
-      setDlMsg((m) => ({ ...m, [r.fileId]: "restricted" }));
-      window.open(r.viewUrl, "_blank");
+
+      let msg = "restricted";
+      try {
+        const errBody = await captureRes.json();
+        if (errBody?.error) msg = errBody.error;
+      } catch { /* ignore */ }
+      setDlMsg((m) => ({ ...m, [r.fileId]: msg }));
+    } catch (e) {
+      setDlMsg((m) => ({
+        ...m,
+        [r.fileId]: e instanceof Error ? e.message : "failed",
+      }));
     } finally {
       setDownloading(null);
     }
@@ -137,7 +166,7 @@ export default function Home() {
             </span>
           </h1>
           <p className="text-muted max-w-lg mx-auto text-sm sm:text-base leading-relaxed">
-            Paste any notes / textbook page URL. We crawl unit pages, extract Drive links, and help you open or download them.
+            Paste any notes page URL. Backend crawls, captures view-only PDFs with Playwright, and returns the file to download.
           </p>
         </section>
 
@@ -145,7 +174,7 @@ export default function Home() {
           {[
             { n: "1", icon: Link2, t: "Paste URL", d: "Educational page or Drive link" },
             { n: "2", icon: Search, t: "Auto scan", d: "Finds all Drive PDF IDs" },
-            { n: "3", icon: Download, t: "Open / Download", d: "Direct if allowed, else viewer" },
+            { n: "3", icon: Download, t: "Backend capture", d: "Playwright → PDF in browser" },
           ].map((s) => (
             <div key={s.n} className="glass rounded-2xl p-4 flex items-start gap-3">
               <div className="step-num">{s.n}</div>
@@ -185,7 +214,7 @@ export default function Home() {
             {results.length > 0 && (
               <>
                 <button onClick={downloadAll} className="btn-ghost inline-flex items-center gap-2 text-sm">
-                  <Download size={16} /> Try download all
+                  <Download size={16} /> Download all
                 </button>
                 <button onClick={openAll} className="btn-ghost inline-flex items-center gap-2 text-sm">
                   <ExternalLink size={16} /> Open all
@@ -223,10 +252,15 @@ export default function Home() {
                       <p className="font-medium text-sm truncate">{r.name}</p>
                       <p className="text-[11px] text-muted font-mono truncate">{r.fileId}</p>
                       {dlMsg[r.fileId] === "restricted" && (
-                        <p className="text-[11px] text-amber mt-0.5">View-only · opened in Drive viewer</p>
+                        <p className="text-[11px] text-amber mt-0.5">View-only · capture failed — try Open</p>
                       )}
-                      {dlMsg[r.fileId] === "ok" && (
-                        <p className="text-[11px] text-green mt-0.5">Downloaded successfully</p>
+                      {dlMsg[r.fileId]?.startsWith("ok") && (
+                        <p className="text-[11px] text-green mt-0.5">
+                          Downloaded{dlMsg[r.fileId].includes(":") ? ` · ${dlMsg[r.fileId].split(":")[1]} pages` : ""}
+                        </p>
+                      )}
+                      {dlMsg[r.fileId] && !dlMsg[r.fileId].startsWith("ok") && dlMsg[r.fileId] !== "restricted" && (
+                        <p className="text-[11px] text-red mt-0.5">{dlMsg[r.fileId]}</p>
                       )}
                     </div>
                   </div>
@@ -236,7 +270,7 @@ export default function Home() {
                     </button>
                     <button onClick={() => tryDownload(r)} disabled={downloading === r.fileId} className="btn-ghost !py-1.5 !px-3 text-xs inline-flex items-center gap-1.5">
                       {downloading === r.fileId ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-                      Download
+                      {downloading === r.fileId ? "Capturing…" : "Download"}
                     </button>
                     <a href={r.viewUrl} target="_blank" rel="noreferrer" className="btn-primary !py-1.5 !px-3 text-xs inline-flex items-center gap-1.5 !shadow-md">
                       <ExternalLink size={13} /> Open
@@ -250,11 +284,11 @@ export default function Home() {
               <div className="flex gap-3">
                 <Shield size={18} className="text-amber shrink-0 mt-0.5" />
                 <div className="text-sm">
-                  <p className="font-semibold text-amber mb-1.5">About view-only PDFs</p>
+                  <p className="font-semibold text-amber mb-1.5">How download works</p>
                   <ul className="text-xs text-muted space-y-1.5 leading-relaxed">
-                    <li className="flex gap-2"><ArrowRight size={12} className="shrink-0 mt-0.5 text-blue" /> <span><b className="text-text">Download</b> tries Google export. Works if the owner allows download.</span></li>
-                    <li className="flex gap-2"><ArrowRight size={12} className="shrink-0 mt-0.5 text-blue" /> <span><b className="text-text">View-only files</b> cannot be auto-downloaded on the web. Open then Print → Save as PDF, or use the Python Playwright tool.</span></li>
-                    <li className="flex gap-2"><ArrowRight size={12} className="shrink-0 mt-0.5 text-blue" /> <span>Full automated capture needs a desktop browser engine — that is what <code className="text-purple text-[11px]">downloader.py</code> does locally.</span></li>
+                    <li className="flex gap-2"><ArrowRight size={12} className="shrink-0 mt-0.5 text-blue" /> <span><b className="text-text">Download</b> calls the server: Playwright opens Drive preview, captures pages, builds PDF, sends it back.</span></li>
+                    <li className="flex gap-2"><ArrowRight size={12} className="shrink-0 mt-0.5 text-blue" /> <span>Long PDFs need <b className="text-text">Vercel Pro</b> (up to 5 min). Hobby plan is ~10 seconds only.</span></li>
+                    <li className="flex gap-2"><ArrowRight size={12} className="shrink-0 mt-0.5 text-blue" /> <span>If capture fails, use Open → Print → Save as PDF, or run <code className="text-purple text-[11px]">downloader.py</code> locally.</span></li>
                   </ul>
                 </div>
               </div>
@@ -265,9 +299,9 @@ export default function Home() {
         {results.length === 0 && !loading && !error && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 fade-up-3 mt-4">
             {[
-              { icon: Zap, t: "Smart crawl", d: "Detects unit, chapter, nazam, grammar pages automatically from education sites." },
-              { icon: BookOpen, t: "Batch scan", d: "Paste multiple URLs or a whole subject index — finds every Drive PDF ID." },
-              { icon: Shield, t: "Restricted aware", d: "Handles view-only files: open in Drive or use local Playwright for full capture." },
+              { icon: Zap, t: "Smart crawl", d: "Detects unit, chapter, nazam, grammar pages automatically." },
+              { icon: BookOpen, t: "Batch scan", d: "Paste multiple URLs — finds every Drive PDF ID." },
+              { icon: Shield, t: "Server capture", d: "Backend Playwright builds the PDF and streams it to you." },
             ].map((f) => (
               <div key={f.t} className="glass rounded-2xl p-5">
                 <div className="w-10 h-10 rounded-xl bg-blue/10 flex items-center justify-center mb-3">
