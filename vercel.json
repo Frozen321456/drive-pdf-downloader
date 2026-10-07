@@ -1,8 +1,14 @@
 {
   "functions": {
     "src/app/api/scan/route.ts": {
-      "maxDuration": 30,
-      "memory": 1024
+      "maxDuration": 30
+    },
+    "src/app/api/download/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/capture/route.ts": {
+      "maxDuration": 300,
+      "memory": 3009
     }
   }
 }
